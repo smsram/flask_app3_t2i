@@ -31,7 +31,12 @@ async def generate_image():
     image_stream = BytesIO(image_data)
     image_stream.seek(0)
 
-    return send_file(image_stream, mimetype='image/png')
+    # Set headers to prevent caching
+    response = send_file(image_stream, mimetype='image/png')
+    response.cache_control.no_cache = True
+    response.cache_control.no_store = True
+    response.cache_control.must_revalidate = True
+    return response
 
 def generate_image_from_huggingface(prompt):
     API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-3.5-large"
