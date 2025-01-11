@@ -9,7 +9,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS to allow requests from different origins
+# Allow requests from a specific origin (adjust the domain as needed)
+CORS(app, resources={r"/generate-image": {"origins": "http://127.0.0.1:5500"}})
 
 # Get API key from environment variable
 API_KEY = os.getenv('HUGGINGFACE_API_KEY')
