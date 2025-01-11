@@ -17,21 +17,17 @@ if not API_KEY:
     raise ValueError("API key is not set in environment variables")
 
 @app.route('/generate-image', methods=['POST'])
-async def generate_image():
+def generate_image():
     data = request.get_json()
     prompt = data.get('prompt')
 
     if not prompt:
         return jsonify({'error': 'Prompt is required'}), 400
 
-    # Asynchronously call the Hugging Face API (non-blocking)
-    image_data = await asyncio.to_thread(generate_image_from_huggingface, prompt)
-
-    # Use BytesIO to convert binary data for sending as a file
+    image_data = generate_image_from_huggingface(prompt)
     image_stream = BytesIO(image_data)
     image_stream.seek(0)
 
-    # Set headers to prevent caching
     response = send_file(image_stream, mimetype='image/png')
     response.cache_control.no_cache = True
     response.cache_control.no_store = True
