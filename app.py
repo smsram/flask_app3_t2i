@@ -10,7 +10,7 @@ import os
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/generate-image": {"origins": "http://127.0.0.1:5500"}})
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all origins for simplicity
 
 API_KEY = os.getenv('HUGGINGFACE_API_KEY')
 
@@ -29,7 +29,7 @@ def generate_image():
             if current_traffic >= MAX_TRAFFIC:
                 return jsonify({
                     'error': 'Server is busy. Please try again later.',
-                    'traffic': current_traffic / MAX_TRAFFIC
+                    'traffic': f"{current_traffic}/{MAX_TRAFFIC}"
                 }), 429
             current_traffic += 1
 
@@ -37,12 +37,12 @@ def generate_image():
         prompt = data.get('prompt')
 
         if not prompt:
-            return jsonify({'error': 'Prompt is required', 'traffic': current_traffic / MAX_TRAFFIC}), 400
+            return jsonify({'error': 'Prompt is required', 'traffic': f"{current_traffic}/{MAX_TRAFFIC}"}), 400
 
         image_data = generate_image_from_huggingface(prompt)
 
         if not image_data:
-            return jsonify({'error': 'Failed to generate image', 'traffic': current_traffic / MAX_TRAFFIC}), 500
+            return jsonify({'error': 'Failed to generate image', 'traffic': f"{current_traffic}/{MAX_TRAFFIC}"}), 500
 
         image_stream = BytesIO(image_data)
         image_stream.seek(0)
@@ -51,16 +51,22 @@ def generate_image():
         response.cache_control.no_cache = True
         response.cache_control.no_store = True
         response.cache_control.must_revalidate = True
-        response.headers['X-Traffic-Ratio'] = str(current_traffic / MAX_TRAFFIC)
+        response.headers['X-Traffic-Ratio'] = f"{current_traffic}/{MAX_TRAFFIC}"
         return response
 
     except Exception as e:
         print("Error while generating image:", e)
-        return jsonify({'error': str(e), 'traffic': current_traffic / MAX_TRAFFIC}), 500
+        return jsonify({'error': str(e), 'traffic': f"{current_traffic}/{MAX_TRAFFIC}"}), 500
 
     finally:
         with traffic_lock:
             current_traffic -= 1
+
+@app.route('/traffic', methods=['GET'])
+def get_traffic():
+    global current_traffic
+    with traffic_lock:
+        return jsonify({'traffic': f"{current_traffic}/{MAX_TRAFFIC}"})
 
 def generate_image_from_huggingface(prompt):
     try:
