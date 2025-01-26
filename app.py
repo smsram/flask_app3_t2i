@@ -1,72 +1,53 @@
+import os
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from io import BytesIO
 import requests
-from threading import Lock
 from dotenv import load_dotenv
-import os
 
-# Load environment variables
+# Load environment variables (if using .env file)
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all origins for simplicity
+# Allow requests from a specific origin (adjust the domain as needed)
+CORS(app, resources={r"/generate-image": {"origins": "http://127.0.0.1:5500"}})
 
+# Get API key from environment variable
 API_KEY = os.getenv('HUGGINGFACE_API_KEY')
 
 if not API_KEY:
     raise ValueError("API key is not set in environment variables")
 
-MAX_TRAFFIC = 3
-current_traffic = 0
-traffic_lock = Lock()  # Lock for thread safety
-
 @app.route('/generate-image', methods=['POST'])
 def generate_image():
-    global current_traffic
     try:
-        with traffic_lock:
-            if current_traffic >= MAX_TRAFFIC:
-                return jsonify({
-                    'error': 'Server is busy. Please try again later.',
-                    'traffic': f"{current_traffic}/{MAX_TRAFFIC}"
-                }), 429
-            current_traffic += 1
-
+        # Parse the JSON data from the request
         data = request.get_json()
         prompt = data.get('prompt')
 
         if not prompt:
-            return jsonify({'error': 'Prompt is required', 'traffic': f"{current_traffic}/{MAX_TRAFFIC}"}), 400
+            return jsonify({'error': 'Prompt is required'}), 400
 
+        # Generate the image using the Hugging Face API
         image_data = generate_image_from_huggingface(prompt)
 
         if not image_data:
-            return jsonify({'error': 'Failed to generate image', 'traffic': f"{current_traffic}/{MAX_TRAFFIC}"}), 500
+            return jsonify({'error': 'Failed to generate image from the Hugging Face model'}), 500
 
+        # Prepare the image data for response
         image_stream = BytesIO(image_data)
         image_stream.seek(0)
 
+        # Send the image as a response
         response = send_file(image_stream, mimetype='image/png')
         response.cache_control.no_cache = True
         response.cache_control.no_store = True
         response.cache_control.must_revalidate = True
-        response.headers['X-Traffic-Ratio'] = f"{current_traffic}/{MAX_TRAFFIC}"
         return response
 
     except Exception as e:
         print("Error while generating image:", e)
-        return jsonify({'error': str(e), 'traffic': f"{current_traffic}/{MAX_TRAFFIC}"}), 500
-
-    finally:
-        with traffic_lock:
-            current_traffic -= 1
-
-@app.route('/traffic', methods=['GET'])
-def get_traffic():
-    global current_traffic
-    with traffic_lock:
-        return jsonify({'traffic': f"{current_traffic}/{MAX_TRAFFIC}"})
+        return jsonify({'error': str(e)}), 500
 
 def generate_image_from_huggingface(prompt):
     try:
@@ -74,8 +55,10 @@ def generate_image_from_huggingface(prompt):
         headers = {"Authorization": f"Bearer {API_KEY}"}
         data = {"inputs": prompt}
 
+        # Call the Hugging Face API
         response = requests.post(API_URL, headers=headers, json=data)
 
+        # Check for successful response
         if response.status_code != 200:
             print(f"Hugging Face API error: {response.status_code}, {response.text}")
             return None
